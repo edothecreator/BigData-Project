@@ -1,0 +1,145 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  ReviewScope design tokens.
+  Brand palette (hex -> hsl):
+    Midnight/navy   #12182B -> 225 40% 12%
+    Electric indigo #6D5EF8 -> 245 92% 67%
+    Mint green      #20C997 -> 162 72% 46%
+    Warm coral      #FF7A59 -> 13 100% 67%
+    Amber           #F5B942 -> 42 90% 61%
+    Light canvas    #F6F7FB -> 231 43% 97%
+    White surface   #FFFFFF -> 0 0% 100%
+    Primary text    #20253A -> 227 29% 18%
+    Secondary text  #778097 -> 222 13% 53%
+    Border          #E5E7EB -> 220 13% 91%
+*/
+
+@layer base {
+  :root {
+    --radius: 0.875rem; /* 14px — within the 12–18px brand range */
+
+    --background: 231 43% 97%; /* light canvas */
+    --foreground: 227 29% 18%; /* primary text */
+
+    --card: 0 0% 100%; /* white surface */
+    --card-foreground: 227 29% 18%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 227 29% 18%;
+
+    --primary: 245 92% 67%; /* electric indigo */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 231 43% 95%;
+    --secondary-foreground: 227 29% 18%;
+
+    --muted: 231 36% 94%;
+    --muted-foreground: 222 13% 53%; /* secondary text */
+
+    --accent: 231 43% 95%;
+    --accent-foreground: 227 29% 18%;
+
+    --destructive: 13 100% 67%; /* warm coral */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 245 92% 67%;
+
+    /* Sidebar surface — a touch deeper than the canvas for separation. */
+    --sidebar: 0 0% 100%;
+    --sidebar-foreground: 227 29% 18%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-accent: 231 43% 96%;
+
+    /* Brand accents */
+    --brand-indigo: 245 92% 67%;
+    --brand-mint: 162 72% 46%;
+    --brand-coral: 13 100% 67%;
+    --brand-amber: 42 90% 61%;
+
+    /* Chart series — ordered for sensible default sequencing. */
+    --chart-1: 245 92% 67%; /* indigo */
+    --chart-2: 162 72% 46%; /* mint */
+    --chart-3: 42 90% 61%; /* amber */
+    --chart-4: 13 100% 67%; /* coral */
+    --chart-5: 227 29% 38%; /* deep slate */
+  }
+
+  .dark {
+    --background: 225 40% 9%; /* deep navy, darker than brand midnight */
+    --foreground: 231 30% 92%;
+
+    --card: 225 36% 13%; /* slightly lighter card surface */
+    --card-foreground: 231 30% 92%;
+
+    --popover: 225 36% 13%;
+    --popover-foreground: 231 30% 92%;
+
+    --primary: 245 92% 72%;
+    --primary-foreground: 225 40% 9%;
+
+    --secondary: 225 30% 18%;
+    --secondary-foreground: 231 30% 92%;
+
+    --muted: 225 28% 17%;
+    --muted-foreground: 222 15% 65%;
+
+    --accent: 225 30% 18%;
+    --accent-foreground: 231 30% 92%;
+
+    --destructive: 13 90% 64%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 225 24% 22%;
+    --input: 225 24% 22%;
+    --ring: 245 92% 72%;
+
+    --sidebar: 225 38% 11%;
+    --sidebar-foreground: 231 30% 92%;
+    --sidebar-border: 225 24% 20%;
+    --sidebar-accent: 225 32% 16%;
+
+    --brand-indigo: 245 92% 72%;
+    --brand-mint: 162 68% 52%;
+    --brand-coral: 13 90% 68%;
+    --brand-amber: 42 88% 64%;
+
+    --chart-1: 245 92% 72%;
+    --chart-2: 162 68% 52%;
+    --chart-3: 42 88% 64%;
+    --chart-4: 13 90% 68%;
+    --chart-5: 231 24% 72%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* Compact uppercase label utility used across the dashboard. */
+  .label-eyebrow {
+    @apply text-[0.6875rem] font-semibold uppercase tracking-[0.08em] text-muted-foreground;
+  }
+}
+
+/* Respect user motion preferences everywhere. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
