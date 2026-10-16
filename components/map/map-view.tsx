@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { MapPin } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
@@ -15,7 +16,6 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/dashboard/error-state";
-import { MapCanvas } from "@/components/map/map-canvas";
 import {
   DEFAULT_MAP_FILTERS,
   useMapData,
@@ -24,12 +24,26 @@ import {
 import { MAP_LIMITS } from "@/lib/map/schema";
 import { cn, formatFull } from "@/lib/utils";
 
+// Leaflet touches `window`, so load the map client-side only (no SSR).
+const LeafletMap = dynamic(() => import("@/components/map/leaflet-map"), {
+  ssr: false,
+  loading: () => (
+    <Skeleton className="h-[560px] w-full rounded-[var(--radius)]" />
+  ),
+});
+
 const RATING_LABELS: Record<number, string> = {
   0: "Any rating",
   3: "3.0 & up",
   4: "4.0 & up",
   4.5: "4.5 & up",
 };
+
+const STATUS_LEGEND = [
+  { key: "open", label: "Open", color: "#20C997" },
+  { key: "closed", label: "Closed", color: "#FF7A59" },
+  { key: "unknown", label: "Unknown", color: "#778097" },
+] as const;
 
 export function MapView() {
   const [filters, setFilters] = React.useState<MapFilters>(DEFAULT_MAP_FILTERS);
@@ -150,10 +164,31 @@ export function MapView() {
           isRetrying={isFetching}
         />
       ) : isLoading && !data ? (
-        <Skeleton className="h-[480px] w-full rounded-[var(--radius)]" />
-      ) : data && data.bounds && data.points.length > 0 ? (
-        <div className={cn(isFetching && "opacity-60 transition-opacity")}>
-          <MapCanvas points={data.points} bounds={data.bounds} />
+        <Skeleton className="h-[560px] w-full rounded-[var(--radius)]" />
+      ) : data && data.points.length > 0 ? (
+        <div
+          className={cn(
+            "space-y-2 transition-opacity",
+            isFetching && "opacity-60",
+          )}
+        >
+          <div className="overflow-hidden rounded-[var(--radius)] border border-border">
+            <LeafletMap points={data.points} />
+          </div>
+
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            {STATUS_LEGEND.map((s) => (
+              <span key={s.key} className="flex items-center gap-1.5">
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ backgroundColor: s.color }}
+                />
+                {s.label}
+              </span>
+            ))}
+            <span>· clusters group nearby businesses — click to zoom in</span>
+          </div>
         </div>
       ) : (
         <Card>
