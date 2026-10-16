@@ -31,7 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Business Explorer", icon: Building2, href: "/businesses" },
   { label: "Recommendations", icon: Sparkles, href: "/recommendations" },
   { label: "Map Explorer", icon: MapIcon, href: "/map" },
-  { label: "Review Explorer", icon: MessagesSquare, comingSoon: true },
+  { label: "Review Explorer", icon: MessagesSquare, href: "/reviews" },
   { label: "Market Insights", icon: TrendingUp, href: "/insights" },
   { label: "Query Performance Lab", icon: Gauge, comingSoon: true },
 ];
