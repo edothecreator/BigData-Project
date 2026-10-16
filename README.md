@@ -191,10 +191,100 @@ mongosh "mongodb://127.0.0.1:27017/yelp_analytics" --file scripts/ensure-indexes
 A text index is intentionally **not** added: name search uses a bounded regex
 to preserve exact substring semantics rather than tokenized matching.
 
-## Roadmap (not in these milestones)
+## Recommendations (`/recommendations`)
 
-Market Insights and Query Performance Lab remain marked **Soon** in the sidebar.
-Review Explorer is available at `/reviews`.
+Item-to-item recommender (no per-user personalization, so no user identity is
+ever involved or exposed). Two strategies, both computed live:
+
+- **Similar businesses (content-based)** — ranks candidates by shared categories
+  (the comma-separated string is split/trimmed/intersected in the pipeline),
+  preferring same-state results, then rating and review volume. ~500ms.
+- **People also reviewed (collaborative)** — finds the businesses most commonly
+  reviewed by the same people as the seed, from co-review counts in `reviews`.
+  Index-backed (~tens of ms). If the required `reviews` indexes are missing, or
+  there is too little signal, it **falls back to content-based** and says so.
+
+No review text and no `user_id` are returned — only aggregate co-review counts.
+
+API: `GET /api/recommendations` (seed + strategy + limit, Zod-validated) and
+`GET /api/recommendations/seeds` (debounced seed search).
+
+## Map Explorer (`/map`)
+
+A dependency-free geographic map of real business coordinates — **no external
+map/tiles library, no API key, no outbound request** (per project scope).
+Business coordinates are projected into an SVG viewport with a cos(latitude)
+correction and drawn over **bundled, local US + Canada state/province outlines**
+(so the dots land on the right states). Markers are colored by open/closed
+status and sized by review volume, with hover tooltips and a legend.
+
+The outline file (`lib/map/na-states.geo.json`, ~380 KB) is derived from the
+public-domain **Natural Earth** 50m admin-1 dataset (via
+github.com/martynafford/natural-earth-geojson), trimmed to US + Canada and
+reduced to ~1 km coordinate precision. It is committed to the repo and loaded
+locally — nothing is fetched at runtime.
+
+- Filters: state, status, minimum rating, and a marker cap (200/500/1000).
+- The API returns a **bounded** set (top-N by review volume) plus the exact
+  match count, so the UI honestly shows "showing N of M". `_id` is never sent.
+
+API: `GET /api/map` (Zod-validated filters).
+
+## Optional indexes — reviews
+
+In addition to the `businesses` indexes above, the collaborative recommender
+needs two indexes on the 6.99M-document `reviews` collection, created by the
+same script (`scripts/ensure-indexes.js`):
+
+- `{ business_id: 1 }` — find the reviewers of a seed business.
+- `{ user_id: 1 }` — find all businesses a set of users reviewed.
+
+Without them, collaborative recommendations would require a full scan per user
+and effectively time out, so the recommender detects their absence and falls
+back to content-based mode.
+
+## Market Insights (`/insights`)
+
+Category and geographic comparisons are computed entirely in MongoDB and served
+by `GET /api/insights`. Run `npm run dev` and open
+**http://localhost:3000/insights**.
+
+- **Category landscape:** the 12 largest categories, with business counts,
+  average business ratings, and open rates. Comma-separated categories are
+  split, trimmed, deduplicated per business, unwound, and grouped server-side.
+- **Geography:** the top 12 states and cities. A state selection filters city
+  comparisons; cities are always grouped with their state to avoid collisions.
+- **Category × geography:** an exact whole-category match followed by a
+  city/state grouping. The category picker contains the 100 most common names.
+- **Review engagement:** the 12 categories with the highest average
+  `businesses.review_count`, requiring at least 20 businesses per category.
+  This does not scan the reviews collection.
+- **Quick Insights:** observations derived from these results. Highest-rated
+  category is explicitly scoped to the 12 leading categories. Counts describe
+  dataset coverage, not population-adjusted density or market saturation.
+
+The state and category controls affect the city comparisons and category
+cross-analysis; the category landscape, state ranking, and engagement ranking
+remain dataset-wide. Open rates exclude unknown statuses and show “Unknown”
+when no known status exists. Missing ratings/review counts remain unavailable,
+not fabricated zeros. Category totals overlap because businesses can have
+multiple categories.
+
+API parameters are optional `state` (1–8 uppercase letters) and `category`
+(1–120 trimmed characters). Unknown parameters and repeated values return 400.
+An unknown valid state/category returns empty results. MongoDB unavailability
+returns 503; unexpected query failures return 500. All responses use no-store.
+Missing `businesses` returns an explicit not-imported state.
+
+Queries run concurrently when independent, have a 20-second per-query limit,
+and return bounded arrays (12 result rows, 50 state options, 100 category
+options). No indexes are added. The existing optional state/city index can help
+state filtering; category normalization still requires a business scan.
+
+This feature demonstrates **semi-structured variety and cross-dimensional
+analysis within `businesses`**. It does not claim a cross-collection join;
+neither reviews nor tips are joined or read, and raw review text is never sent
+to the client.
 
 ## Review Explorer (`/reviews`) — Volume
 
@@ -236,3 +326,7 @@ dependencies are unavailable (`tsc` / `next` not found). Installing with
 dependencies install successfully. Database/API and browser integration checks,
 including database-down behavior, were intentionally not run: MongoDB has not
 yet been installed. Real counts and rendering remain unverified.
+
+## Roadmap (team milestones in progress)
+
+Query Performance Lab remains marked **Soon** in the sidebar (see `team-prompts/`).

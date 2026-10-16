@@ -1,0 +1,246 @@
+================================================================================
+REVIEWSCOPE — TASK FOR: Belfqih
+FEATURE: Query Performance Lab  (Big Data angle: PERFORMANCE / SCALING)
+================================================================================
+
+Paste this entire file into your AI coding agent (inside the ReviewScope
+project folder). It is self-contained — follow it end to end.
+
+This is the most "Big Data" feature of the project: it MEASURES and VISUALIZES
+query performance — collection scans vs. index scans, timings, and MongoDB's
+explain() output. Treat it as an educational, demo-friendly lab.
+
+
+--------------------------------------------------------------------------------
+0. CONTEXT — WHAT REVIEWSCOPE IS
+--------------------------------------------------------------------------------
+ReviewScope is an academic Big Data analytics dashboard built on the Yelp Open
+Dataset, served from a LOCAL MongoDB. It is a Next.js (App Router) + React +
+TypeScript (strict) app, styled with Tailwind CSS and shadcn-style components
+(built on Radix UI), icons from lucide-react, charts via Recharts, validation
+via Zod, and the official MongoDB Node.js driver.
+
+Two features already exist and MUST keep working untouched:
+  - "Overview"           -> route "/"            (components/dashboard/*)
+  - "Business Explorer"  -> route "/businesses"  (components/businesses/*)
+
+MongoDB runs locally:
+  URI:      mongodb://127.0.0.1:27017   (in .env.local as MONGODB_URI)
+  Database: yelp_analytics              (in .env.local as MONGODB_DB)
+
+Collections (confirmed real counts):
+  businesses  150,346
+  reviews     6,990,280
+  users       1,987,897
+  tips          908,915
+  checkins      131,930
+
+The project ALREADY ships an index helper script:
+  scripts/ensure-indexes.js   -> creates (idempotently) these indexes on `businesses`:
+        { state: 1, city: 1 }
+        { stars: -1, business_id: 1 }
+        { review_count: -1, business_id: 1 }
+  (plus the default _id_ index). Your lab should let users SEE the effect of
+  indexes like these.
+
+
+--------------------------------------------------------------------------------
+1. INSPECT BEFORE YOU CHANGE ANYTHING  (do this first, do NOT skip)
+--------------------------------------------------------------------------------
+Read these existing files and COPY their patterns exactly:
+  - lib/mongodb.ts                 (cached connection — REUSE, do not recreate)
+  - lib/businesses/queries.ts      (buildBusinessFilter, projections, sorting)
+  - lib/businesses/schema.ts       (Zod validation + allowlists — CRUCIAL here)
+  - lib/businesses/api-helpers.ts  (error envelope + status codes)
+  - app/api/businesses/route.ts    (route handler style, force-dynamic)
+  - scripts/ensure-indexes.js      (which indexes exist and why)
+  - components/layout/app-shell.tsx (the shared page shell — REUSE it)
+  - components/businesses/business-explorer-view.tsx (how a full page is built)
+  - components/ui/*                (card, table, select, chart, skeleton, badge)
+  - components/layout/sidebar.tsx  (nav items — you will flip "Query Performance Lab")
+
+Preserve the existing architecture and design system. Reuse the MongoDB
+connection, the AppShell, the design tokens, the UI components, the toast
+system (sonner), and the error/loading/empty-state patterns.
+
+Do NOT rebuild the app. Do NOT re-import data. Do NOT modify Overview or
+Business Explorer behavior. Do NOT change MongoDB server config.
+
+
+--------------------------------------------------------------------------------
+2. HARD SAFETY RULES  (read carefully — this feature touches the DB engine)
+--------------------------------------------------------------------------------
+Because this lab deals with queries and indexes, be strict:
+  - The user must NOT be able to run arbitrary queries. Offer a FIXED, CURATED
+    set of predefined "scenarios" (an allowlist). The client only picks a
+    scenario id + a few bounded parameters. NEVER accept raw filter objects,
+    raw pipelines, or arbitrary field names from the client. Validate everything
+    with Zod against an explicit allowlist (copy lib/businesses/schema.ts).
+  - Use explain() with verbosity "queryPlanner" or "executionStats". Do NOT use
+    any mode that could run destructive work. explain is read-only — keep it so.
+  - Index management (if you expose a "create index" button) must be LIMITED to a
+    small, hardcoded allowlist of safe, non-unique indexes on known fields, and
+    must be IDEMPOTENT (createIndex is safe to call repeatedly). NEVER drop,
+    NEVER modify existing indexes, NEVER touch the _id index, NEVER change server
+    config. Dropping is out of scope — do not implement it.
+  - All queries are read-only. No inserts/updates/deletes anywhere.
+
+
+--------------------------------------------------------------------------------
+3. WHAT TO BUILD — "Query Performance Lab" page at route /performance
+--------------------------------------------------------------------------------
+Flip the sidebar item: in components/layout/sidebar.tsx change the
+"Query Performance Lab" entry from `comingSoon: true` to a real
+`href: "/performance"` (same way "Business Explorer" is wired).
+
+The page (wrap it in the shared AppShell) must include:
+
+HEADER
+  - Title: "Query Performance Lab"
+  - Subtitle: "See how indexing and query shape affect performance at scale."
+
+A. SCENARIO PICKER  (curated allowlist — this is the core)
+   Provide a dropdown of predefined scenarios. Suggested set (all on `businesses`
+   unless noted), each with 1–2 bounded params:
+     1. "Filter by state"            -> { state } equality match
+     2. "Filter by state + city"     -> { state, city } (shows compound index win)
+     3. "Sort by rating (stars)"     -> sort { stars: -1 }, limited
+     4. "Sort by review_count"       -> sort { review_count: -1 }, limited
+     5. "Name substring (regex)"     -> name regex (ESCAPE metacharacters!) —
+                                        demonstrates why regex can't use a btree index
+     6. "Count by filter"            -> countDocuments vs estimatedDocumentCount comparison
+   Params (state/city/search) must be validated and bounded with Zod. Escape any
+   regex metacharacters in user input (reuse escapeRegex from lib/businesses/queries.ts).
+
+B. RUN + MEASURE
+   For the selected scenario, the server runs the query and returns:
+     - Execution time in ms (measure server-side around the query;
+       for stable numbers you MAY run it 2-3 times and report the median — document this).
+     - The explain() summary: winning plan stage (COLLSCAN vs IXSCAN),
+       whether an index was used, index name if any, documents examined vs
+       documents returned, and total keys examined (from executionStats).
+     - The result count (not the full documents — just the count or a tiny sample).
+
+C. WITH-INDEX vs WITHOUT-INDEX COMPARISON  (the headline demo)
+   The clearest version: show the explain()/timing for a scenario and clearly
+   display whether it hit an index (IXSCAN) or scanned the whole collection
+   (COLLSCAN), with examined-vs-returned document counts. Explain in the UI what
+   that means. If you implement an optional "ensure index" button (allowlisted,
+   idempotent, per rule 2), the user can create the helpful index and re-run to
+   watch COLLSCAN -> IXSCAN and the examined-docs number drop. (Creating is OK;
+   dropping is NOT — so design the demo around "before indexes exist" naturally,
+   or just visualize the current plan. Do not implement drop.)
+
+D. RESULTS PANEL  (make it readable and visual)
+   - A clear verdict badge: "Index scan (IXSCAN)" vs "Collection scan (COLLSCAN)".
+   - A small table of explain metrics (stage, index, nReturned, totalDocsExamined,
+     totalKeysExamined, executionTimeMillis).
+   - Optionally a tiny bar chart comparing docsExamined vs docsReturned, or timing
+     across a couple of scenarios (reuse components/ui/chart.tsx).
+   - Short plain-language explanation of why the plan is good or bad.
+
+E. CURRENT INDEXES PANEL
+   - List the current indexes on `businesses` (read via listIndexes/indexes()),
+     showing name + keys. Read-only. This lets the demo show which indexes exist.
+
+F. STATES: loading skeletons, empty/error states (reuse
+   components/dashboard/error-state.tsx), light/dark, responsive.
+
+
+--------------------------------------------------------------------------------
+4. SUGGESTED FILE STRUCTURE  (mirror the businesses feature)
+--------------------------------------------------------------------------------
+  lib/performance/scenarios.ts   -> the ALLOWLIST of scenarios (id, label, how to
+                                    build the query/sort/filter). Single source of truth.
+  lib/performance/types.ts       -> browser-facing result types (plan summary, metrics)
+  lib/performance/schema.ts      -> Zod: scenario id enum + bounded params
+  lib/performance/queries.ts     -> runs the query, times it, runs explain(),
+                                    normalizes the plan (import "server-only")
+  app/api/performance/route.ts   -> GET/POST endpoint, dynamic="force-dynamic",
+                                    runtime="nodejs", no-store
+  app/api/performance/indexes/route.ts (optional) -> GET current indexes;
+                                    POST = create an ALLOWLISTED index idempotently (no drop)
+  app/performance/page.tsx       -> the page (Suspense wrapper if needed)
+  components/performance/*        -> scenario picker, results panel, metrics table,
+                                    verdict badge, indexes panel
+  hooks/use-performance.ts        -> client fetch/loading/error hook
+
+Reuse, don't duplicate: AppShell, chart wrapper, Card, Table, Select, Skeleton,
+Badge, error-state, and formatters in lib/utils.ts.
+
+
+--------------------------------------------------------------------------------
+5. HOW TO GET explain() DATA (Node driver)
+--------------------------------------------------------------------------------
+With the official driver you can do, for example:
+  const coll = db.collection("businesses");
+  const explain = await coll.find(filter).sort(sort).limit(n).explain("executionStats");
+  // read: explain.queryPlanner.winningPlan   (look for stage COLLSCAN / IXSCAN,
+  //       and inputStage chains), and explain.executionStats
+  //       (executionTimeMillis, nReturned, totalDocsExamined, totalKeysExamined).
+For aggregation scenarios use coll.aggregate(pipeline).explain().
+Normalize the nested winningPlan into a simple { stage, indexName, usedIndex }
+summary on the server so the browser gets clean JSON (never the raw huge object).
+Measure wall-clock time server-side with performance.now()/Date.now() around the
+actual query run (separate from explain).
+
+
+--------------------------------------------------------------------------------
+6. PERFORMANCE / CORRECTNESS RULES
+--------------------------------------------------------------------------------
+  - Never return full documents to the browser — return counts, a tiny sample, and
+    the normalized explain summary only.
+  - Bound every parameter; limit result sizes. $match early.
+  - Escape regex metacharacters in any name search.
+  - Index creation (if implemented) is allowlisted + idempotent + never drops.
+  - Independent reads can use Promise.all, but don't hammer the DB with duplicates.
+
+
+--------------------------------------------------------------------------------
+7. API / VALIDATION / SAFETY
+--------------------------------------------------------------------------------
+  - Validate with Zod against an explicit scenario allowlist. Reject anything not
+    on the list. NEVER accept raw filters/pipelines/field names from the client.
+  - ALL DB access server-side. Never expose MONGODB_URI/env to the browser.
+    Never use NEXT_PUBLIC_ for secrets.
+  - Consistent JSON error envelope + correct HTTP codes (400/404/503/500) —
+    reuse lib/businesses/api-helpers.ts style.
+  - Dynamic endpoint: dynamic="force-dynamic"; runtime="nodejs"; no-store.
+
+
+--------------------------------------------------------------------------------
+8. VERIFY BEFORE YOU SAY IT'S DONE  (run these, report real results)
+--------------------------------------------------------------------------------
+  1. npm run typecheck   -> must pass (strict). Fix errors, don't weaken config.
+  2. npm run lint        -> must pass with no warnings.
+  3. npm run build       -> must succeed.
+  4. Start the server and exercise the lab with real data:
+        npm run dev        (or: npm run start -- --port 3100 after a build)
+     Verify:
+       - Each scenario runs and returns a real explain summary + timing.
+       - An indexed scenario (e.g. state+city, or sort by stars) shows IXSCAN;
+         a regex-name scenario shows COLLSCAN — and the UI explains the difference.
+       - totalDocsExamined vs nReturned are shown and make sense.
+       - The current-indexes panel lists the real indexes (incl. the ones from
+         scripts/ensure-indexes.js if that script has been run).
+       - Overview ("/") and Business Explorer ("/businesses") STILL WORK.
+       - No arbitrary query input is possible; bad params return 400.
+       - DB-down behavior shows the honest error state, not fake data.
+  If a check cannot be completed, say so honestly — do not claim it passed.
+
+
+--------------------------------------------------------------------------------
+9. DELIVERABLE — tell the team
+--------------------------------------------------------------------------------
+When done, summarize: files created/modified, the scenarios you defined, how you
+measured timing + read explain(), whether/what index creation you exposed (and
+the safety guards), the exact pass/fail of typecheck+lint+build, how to launch
+(npm run dev -> http://localhost:3000/performance), and any limitation.
+
+Commit on a branch (do NOT push straight to main):
+  git checkout -b feature/query-performance-lab
+  git add <your files>    (add specific files; never commit .env.local)
+  git commit -m "Query Performance Lab: explain() + index scan vs collscan (performance)"
+  git push -u origin feature/query-performance-lab
+Then open a Pull Request so the team can review/merge.
+================================================================================
