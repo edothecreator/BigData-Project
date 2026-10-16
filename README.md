@@ -214,8 +214,9 @@ API: `GET /api/recommendations` (seed + strategy + limit, Zod-validated) and
 An interactive **Leaflet** map plotting businesses at their exact Yelp
 coordinates, with **marker clustering** so dense cities stay readable (clusters
 expand on click/zoom). Markers are colored by open/closed status; a popup shows
-the name, rating, review count, and status. The basemap uses **CARTO** tiles
-(light/dark variants that follow the app theme) — free and no API key.
+the name, rating, review count, and status. The basemap uses **Esri "Canvas"**
+tiles (light/dark gray variants that follow the app theme) — free and no API
+key. (CARTO basemaps were tried first but now require an API key.)
 
 - Loaded client-side via `next/dynamic` (`ssr: false`) since Leaflet needs
   `window`; the map chunk is lazy-loaded only on this route.

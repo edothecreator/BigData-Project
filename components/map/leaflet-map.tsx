@@ -19,17 +19,20 @@ import type { MapPoint } from "@/lib/map/types";
  * business data itself stays entirely local in MongoDB and is never sent out.
  */
 
-// CARTO basemaps — free, no API key. Dark matches ReviewScope's navy palette.
+// Esri "Canvas" basemaps — free, NO API key required, and intentionally
+// minimal (clean gray canvas) which suits an analytics map. Light/dark variants
+// follow the app theme. (CARTO's basemaps now require a key, so we don't use
+// them.)
+const ESRI_ATTR =
+  'Tiles &copy; <a href="https://www.esri.com/">Esri</a> — Esri, HERE, Garmin, &copy; OpenStreetMap contributors';
 const TILES = {
   light: {
-    url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    attribution: ESRI_ATTR,
   },
   dark: {
-    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    attribution: ESRI_ATTR,
   },
 } as const;
 
@@ -49,7 +52,7 @@ export default function LeafletMap({ points }: { points: MapPoint[] }) {
         key={resolvedTheme}
         url={tiles.url}
         attribution={tiles.attribution}
-        maxZoom={19}
+        maxZoom={16}
       />
       <ClusterLayer points={points} />
     </MapContainer>
