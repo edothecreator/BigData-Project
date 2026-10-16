@@ -32,7 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Recommendations", icon: Sparkles, href: "/recommendations" },
   { label: "Map Explorer", icon: MapIcon, href: "/map" },
   { label: "Review Explorer", icon: MessagesSquare, comingSoon: true },
-  { label: "Market Insights", icon: TrendingUp, comingSoon: true },
+  { label: "Market Insights", icon: TrendingUp, href: "/insights" },
   { label: "Query Performance Lab", icon: Gauge, comingSoon: true },
 ];
 

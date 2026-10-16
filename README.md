@@ -243,8 +243,50 @@ Without them, collaborative recommendations would require a full scan per user
 and effectively time out, so the recommender detects their absence and falls
 back to content-based mode.
 
+## Market Insights (`/insights`)
+
+Category and geographic comparisons are computed entirely in MongoDB and served
+by `GET /api/insights`. Run `npm run dev` and open
+**http://localhost:3000/insights**.
+
+- **Category landscape:** the 12 largest categories, with business counts,
+  average business ratings, and open rates. Comma-separated categories are
+  split, trimmed, deduplicated per business, unwound, and grouped server-side.
+- **Geography:** the top 12 states and cities. A state selection filters city
+  comparisons; cities are always grouped with their state to avoid collisions.
+- **Category × geography:** an exact whole-category match followed by a
+  city/state grouping. The category picker contains the 100 most common names.
+- **Review engagement:** the 12 categories with the highest average
+  `businesses.review_count`, requiring at least 20 businesses per category.
+  This does not scan the reviews collection.
+- **Quick Insights:** observations derived from these results. Highest-rated
+  category is explicitly scoped to the 12 leading categories. Counts describe
+  dataset coverage, not population-adjusted density or market saturation.
+
+The state and category controls affect the city comparisons and category
+cross-analysis; the category landscape, state ranking, and engagement ranking
+remain dataset-wide. Open rates exclude unknown statuses and show “Unknown”
+when no known status exists. Missing ratings/review counts remain unavailable,
+not fabricated zeros. Category totals overlap because businesses can have
+multiple categories.
+
+API parameters are optional `state` (1–8 uppercase letters) and `category`
+(1–120 trimmed characters). Unknown parameters and repeated values return 400.
+An unknown valid state/category returns empty results. MongoDB unavailability
+returns 503; unexpected query failures return 500. All responses use no-store.
+Missing `businesses` returns an explicit not-imported state.
+
+Queries run concurrently when independent, have a 20-second per-query limit,
+and return bounded arrays (12 result rows, 50 state options, 100 category
+options). No indexes are added. The existing optional state/city index can help
+state filtering; category normalization still requires a business scan.
+
+This feature demonstrates **semi-structured variety and cross-dimensional
+analysis within `businesses`**. It does not claim a cross-collection join;
+neither reviews nor tips are joined or read, and raw review text is never sent
+to the client.
+
 ## Roadmap (team milestones in progress)
 
-Review Explorer, Market Insights, and a Query Performance Lab are present in the
-sidebar marked **Soon** and are being implemented separately (see
-`team-prompts/`).
+Review Explorer and a Query Performance Lab are present in the sidebar marked
+**Soon** and are being implemented separately (see `team-prompts/`).
