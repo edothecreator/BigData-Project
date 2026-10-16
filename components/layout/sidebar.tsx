@@ -28,7 +28,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Overview", icon: BarChart3, href: "/" },
   { label: "Business Explorer", icon: Building2, href: "/businesses" },
   { label: "Review Explorer", icon: MessagesSquare, comingSoon: true },
-  { label: "Market Insights", icon: TrendingUp, comingSoon: true },
+  { label: "Market Insights", icon: TrendingUp, href: "/insights" },
   { label: "Query Performance Lab", icon: Gauge, comingSoon: true },
 ];
 
