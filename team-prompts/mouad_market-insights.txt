@@ -1,0 +1,226 @@
+================================================================================
+REVIEWSCOPE — TASK FOR: Mouad
+FEATURE: Market Insights  (Big Data angle: VARIETY — cross-collection aggregation)
+================================================================================
+
+Paste this entire file into your AI coding agent (inside the ReviewScope
+project folder). It is self-contained — follow it end to end.
+
+
+--------------------------------------------------------------------------------
+0. CONTEXT — WHAT REVIEWSCOPE IS
+--------------------------------------------------------------------------------
+ReviewScope is an academic Big Data analytics dashboard built on the Yelp Open
+Dataset, served from a LOCAL MongoDB. It is a Next.js (App Router) + React +
+TypeScript (strict) app, styled with Tailwind CSS and shadcn-style components
+(built on Radix UI), icons from lucide-react, charts via Recharts, validation
+via Zod, and the official MongoDB Node.js driver.
+
+Two features already exist and MUST keep working untouched:
+  - "Overview"           -> route "/"            (components/dashboard/*)
+  - "Business Explorer"  -> route "/businesses"  (components/businesses/*)
+
+MongoDB runs locally:
+  URI:      mongodb://127.0.0.1:27017   (in .env.local as MONGODB_URI)
+  Database: yelp_analytics              (in .env.local as MONGODB_DB)
+
+Collections (confirmed real counts):
+  businesses  150,346   <-- your primary collection
+  reviews     6,990,280
+  users       1,987,897
+  tips          908,915
+  checkins      131,930
+
+Business document (confirmed real schema):
+  {
+    business_id, name, address, city, state, postal_code,
+    latitude, longitude,
+    stars,            // number 1..5 in half steps (business avg rating)
+    review_count,     // number
+    is_open,          // 1 (open) or 0 (closed)
+    categories,       // COMMA-SEPARATED STRING e.g. "Coffee & Tea, Food, Restaurants"
+    attributes,       // nested object with "stringy" values
+    hours             // nested object: weekday -> "6:0-21:0"
+  }
+Review document: { review_id, user_id, business_id, stars, useful, funny, cool, text, date }
+Tip document (approx): { user_id, business_id, text, date, compliment_count }
+IMPORTANT: `categories` is a STRING, not an array. You must $split / $trim /
+$unwind to work with individual categories (see lib/dashboard/queries.ts for the
+exact pattern already used).
+
+
+--------------------------------------------------------------------------------
+1. INSPECT BEFORE YOU CHANGE ANYTHING  (do this first, do NOT skip)
+--------------------------------------------------------------------------------
+Read these existing files and COPY their patterns exactly:
+  - lib/mongodb.ts                 (cached connection — REUSE, do not recreate)
+  - lib/dashboard/queries.ts       (category split/trim/unwind, groupings, insights)
+  - lib/dashboard/types.ts         (browser-facing type shaping)
+  - lib/businesses/queries.ts      (filter building, projections)
+  - lib/businesses/api-helpers.ts  (error envelope + status codes)
+  - app/api/dashboard/route.ts     (route handler style, force-dynamic)
+  - components/layout/app-shell.tsx (the shared page shell — REUSE it)
+  - components/dashboard/dashboard-view.tsx (how a full dashboard page is built)
+  - components/dashboard/*         (KPI cards, chart-card, charts, quick-insights)
+  - components/ui/*                (card, chart, select, skeleton, badge, etc.)
+  - components/layout/sidebar.tsx  (nav items — you will flip "Market Insights")
+
+Preserve the existing architecture and design system. Reuse the MongoDB
+connection, the AppShell, the design tokens, the UI components, the toast
+system (sonner), and the error/loading/empty-state patterns.
+
+Do NOT rebuild the app. Do NOT re-import data. Do NOT modify Overview or
+Business Explorer behavior. Do NOT change MongoDB server config.
+
+
+--------------------------------------------------------------------------------
+2. WHAT TO BUILD — "Market Insights" page at route /insights
+--------------------------------------------------------------------------------
+This feature is the "VARIETY" story: it combines and cross-analyzes data from
+multiple collections and the semi-structured category field, producing
+higher-level market analytics (not just raw counts).
+
+Flip the sidebar item: in components/layout/sidebar.tsx change the
+"Market Insights" entry from `comingSoon: true` to a real `href: "/insights"`
+(same way "Business Explorer" is wired).
+
+The page (wrap it in the shared AppShell) must include:
+
+HEADER
+  - Title: "Market Insights"
+  - Subtitle: "Category and geographic patterns across the local business market."
+  - A refresh control.
+
+Build these analytics (ALL computed server-side via aggregation; return only
+small summarized arrays). Pick strong, clearly-labeled visuals (Recharts via
+components/ui/chart.tsx) and tables:
+
+A. CATEGORY MARKET LANDSCAPE
+   - For the top ~12 categories (split/trim/unwind the categories string, group,
+     count), compute PER CATEGORY:
+       * number of businesses
+       * average business rating (avg of stars)
+       * open rate (% with is_open === 1)
+   - Show as a table and/or a chart. This turns a messy string field into a
+     structured market view — call that out as the "variety" handling.
+
+B. GEOGRAPHIC BREAKDOWN  (by STATE, then drill to city)
+   - Group by state: business count, average rating, open rate. Top states.
+   - Optionally let the user pick a state and show that state's top cities
+     (group by city+state together — same city name can exist in two states).
+   - Use readable labels; truncate long ones; real tooltips.
+
+C. CATEGORY x GEOGRAPHY CROSS-ANALYSIS  (the standout "variety" piece)
+   - e.g. "Top category per state" OR "where is category X densest".
+     Let the user choose a category (reuse a Select populated from a bounded
+     server-provided category list), then show the top cities/states for that
+     category with counts and average rating.
+   - This is a cross-dimensional aggregation — document the pipeline in comments.
+
+D. REVIEW ENGAGEMENT BY CATEGORY  (cross-collection — OPTIONAL but high value)
+   - Using businesses.review_count (already on each business doc; do NOT scan the
+     7M reviews for this), compute average review_count per category to show which
+     categories attract the most engagement. (If you want a true cross-collection
+     join you MAY $lookup reviews for a SMALL filtered subset only — never the
+     whole collection. Prefer the review_count field for scale.)
+
+E. DERIVED "Key Insights" strip
+   - 3–4 short observations computed from the real results above (e.g. "Highest
+     rated category: X at Y.Y stars", "Most saturated market: City, ST").
+     Reuse the quick-insights pattern from the dashboard. Never hardcode.
+
+F. STATES: loading skeletons (preserve layout), empty states, and an honest
+   error state (reuse components/dashboard/error-state.tsx). Light/dark + responsive.
+
+
+--------------------------------------------------------------------------------
+3. SUGGESTED FILE STRUCTURE  (mirror the dashboard feature)
+--------------------------------------------------------------------------------
+  lib/insights/types.ts        -> browser-facing types (plain JSON, no _id)
+  lib/insights/queries.ts      -> typed aggregation functions (import "server-only")
+  lib/insights/schema.ts       -> Zod validation for any params (e.g. selected category/state)
+  app/api/insights/route.ts    -> GET endpoint, dynamic="force-dynamic",
+                                  runtime="nodejs", no-store cache headers
+  app/insights/page.tsx        -> the page (Suspense wrapper if using useSearchParams)
+  components/insights/*         -> cards, charts, tables, cross-analysis controls
+  hooks/use-insights-data.ts   -> client fetch/loading/error hook (copy dashboard hook)
+
+Reuse, don't duplicate: AppShell, chart wrapper, Card, ChartCard, Select,
+Skeleton, Badge, QuickInsights pattern, error-state, and the formatters in
+lib/utils.ts (formatCompact, formatFull, formatPercent).
+
+
+--------------------------------------------------------------------------------
+4. HANDLING THE `categories` STRING  (the core "variety" requirement)
+--------------------------------------------------------------------------------
+Reuse the exact pattern already in lib/dashboard/queries.ts:
+  { $match: { categories: { $type: "string", $ne: "" } } },
+  { $project: { cats: { $map: {
+      input: { $split: ["$categories", ","] }, as: "c",
+      in: { $trim: { input: "$$c" } } } } } },
+  { $unwind: "$cats" },
+  { $match: { cats: { $ne: "" } } },
+  { $group: { _id: "$cats", ... } },
+  { $sort: { ... } },
+  { $limit: N }
+Trim whitespace consistently. Match WHOLE categories, not accidental substrings.
+Do NOT treat the raw comma-joined string as a single category.
+
+
+--------------------------------------------------------------------------------
+5. PERFORMANCE RULES  (graded on this)
+--------------------------------------------------------------------------------
+  - All grouping/averaging in MongoDB via aggregation. Return small arrays only.
+  - $match early, $limit always. Never find({}).toArray() on a whole collection.
+  - Prefer businesses.review_count over scanning the 7M reviews collection.
+  - If you ever $lookup across collections, restrict to a SMALL filtered set.
+  - Run independent queries concurrently with Promise.all.
+  - Do NOT create duplicate indexes blindly or drop existing ones. If an index is
+    clearly justified, create it idempotently in a script and DOCUMENT why.
+
+
+--------------------------------------------------------------------------------
+6. API / VALIDATION / SAFETY
+--------------------------------------------------------------------------------
+  - Validate params with Zod (bounded, allowlisted) — copy lib/businesses/schema.ts.
+    Reject arbitrary operators; never accept raw pipeline objects from the client.
+  - ALL DB access server-side. Never expose MONGODB_URI/env to the browser.
+    Never use NEXT_PUBLIC_ for secrets. Never return internal _id unnecessarily.
+  - Consistent JSON error envelope + correct HTTP codes (400/404/503/500) —
+    reuse lib/businesses/api-helpers.ts style.
+  - Dynamic endpoint: export const dynamic="force-dynamic"; runtime="nodejs";
+    Cache-Control no-store.
+
+
+--------------------------------------------------------------------------------
+7. VERIFY BEFORE YOU SAY IT'S DONE  (run these, report real results)
+--------------------------------------------------------------------------------
+  1. npm run typecheck   -> must pass (strict). Fix errors, don't weaken config.
+  2. npm run lint        -> must pass with no warnings.
+  3. npm run build       -> must succeed.
+  4. Start the server and hit the API with real data:
+        npm run dev        (or: npm run start -- --port 3100 after a build)
+     Verify:
+       - Category landscape returns real categories with counts + avg rating + open rate.
+       - Geographic breakdown returns real states/cities with sensible numbers.
+       - Category x geography cross-analysis responds correctly when you pick a category.
+       - Key Insights are generated from the real query results (not hardcoded).
+       - Overview ("/") and Business Explorer ("/businesses") STILL WORK.
+       - DB-down behavior shows the honest error state, not fake data.
+  If a check cannot be completed, say so honestly — do not claim it passed.
+
+
+--------------------------------------------------------------------------------
+8. DELIVERABLE — tell the team
+--------------------------------------------------------------------------------
+When done, summarize: files created/modified, the aggregations you wrote, any
+index you added (and why), the exact pass/fail of typecheck+lint+build, how to
+launch (npm run dev -> http://localhost:3000/insights), and any limitation.
+
+Commit on a branch (do NOT push straight to main):
+  git checkout -b feature/market-insights
+  git add <your files>    (add specific files; never commit .env.local)
+  git commit -m "Market Insights: cross-collection + category analytics (variety)"
+  git push -u origin feature/market-insights
+Then open a Pull Request so the team can review/merge.
+================================================================================

@@ -1,0 +1,232 @@
+================================================================================
+REVIEWSCOPE — TASK FOR: Mohammed Elomri
+FEATURE: Review Explorer  (Big Data angle: VOLUME — the 6.99M reviews collection)
+================================================================================
+
+Paste this entire file into your AI coding agent (inside the ReviewScope
+project folder). It is self-contained — follow it end to end.
+
+
+--------------------------------------------------------------------------------
+0. CONTEXT — WHAT REVIEWSCOPE IS
+--------------------------------------------------------------------------------
+ReviewScope is an academic Big Data analytics dashboard built on the Yelp Open
+Dataset, served from a LOCAL MongoDB. It is a Next.js (App Router) + React +
+TypeScript (strict) app, styled with Tailwind CSS and shadcn-style components
+(built on Radix UI), icons from lucide-react, charts via Recharts, validation
+via Zod, and the official MongoDB Node.js driver.
+
+Two features already exist and MUST keep working untouched:
+  - "Overview"           -> route "/"            (components/dashboard/*)
+  - "Business Explorer"  -> route "/businesses"  (components/businesses/*)
+
+MongoDB runs locally:
+  URI:      mongodb://127.0.0.1:27017   (in .env.local as MONGODB_URI)
+  Database: yelp_analytics              (in .env.local as MONGODB_DB)
+
+Collections (confirmed real counts):
+  businesses  150,346
+  reviews     6,990,280   <-- YOUR feature focuses on this one
+  users       1,987,897
+  tips          908,915
+  checkins      131,930
+
+A review document looks like this (confirmed real schema):
+  {
+    review_id:  "BiTunyQ73aT9WBnpR9DZGw",
+    user_id:    "...",
+    business_id:"7ATYjTIgM3jUlt4UM3IypQ",
+    stars:      5,                       // number 1..5 (integers for reviews)
+    useful:     0,                       // number
+    funny:      0,                       // number
+    cool:       0,                       // number
+    text:       "....",                  // the review text (SEE PRIVACY RULE)
+    date:       "2012-01-03 15:28:18"    // STRING, format "YYYY-MM-DD HH:MM:SS"
+  }
+
+A business document (for joins / labels):
+  { business_id, name, city, state, stars, review_count, is_open, categories, ... }
+  NOTE: `categories` is a COMMA-SEPARATED STRING, not an array.
+
+
+--------------------------------------------------------------------------------
+1. INSPECT BEFORE YOU CHANGE ANYTHING  (do this first, do NOT skip)
+--------------------------------------------------------------------------------
+Read these existing files and COPY their patterns exactly:
+  - lib/mongodb.ts                 (cached connection — REUSE, do not recreate)
+  - lib/dashboard/queries.ts       (how aggregations are written)
+  - lib/businesses/queries.ts      (filter building, pagination, projections)
+  - lib/businesses/schema.ts       (Zod validation + allowlists pattern)
+  - lib/businesses/types.ts        (how browser-facing types are shaped)
+  - lib/businesses/api-helpers.ts  (error envelope + status codes)
+  - app/api/businesses/route.ts    (route handler style, force-dynamic)
+  - components/layout/app-shell.tsx (the shared page shell — REUSE it)
+  - components/businesses/business-explorer-view.tsx (how a full page is built)
+  - components/ui/*                (card, table, select, chart, skeleton, etc.)
+  - components/layout/sidebar.tsx  (nav items — you will flip "Review Explorer")
+
+Preserve the existing architecture and design system. Reuse the MongoDB
+connection, the AppShell, the design tokens, the UI components, the toast
+system (sonner), and the error/loading/empty-state patterns.
+
+Do NOT rebuild the app. Do NOT re-import data. Do NOT modify Overview or
+Business Explorer behavior. Do NOT change MongoDB server config.
+
+
+--------------------------------------------------------------------------------
+2. PRIVACY RULE (CRITICAL — this is an academic constraint)
+--------------------------------------------------------------------------------
+This feature is about VOLUME and AGGREGATE analytics, NOT about exposing people.
+  - DO NOT return raw review `text` in bulk, and DO NOT build a feed that dumps
+    review text. If you show any text sample at all, show at most a FEW short
+    snippets, truncated, and only for a single selected business — never a bulk
+    export, never searchable full text.
+  - DO NOT expose `user_id`, user profiles, or anything that identifies a person.
+  - The dashboard presents AGGREGATE statistics (counts, averages, distributions,
+    trends over time). That is the whole point of the "Volume" story.
+  - Never send millions of documents to the browser.
+
+
+--------------------------------------------------------------------------------
+3. WHAT TO BUILD — "Review Explorer" page at route /reviews
+--------------------------------------------------------------------------------
+Make it a NEW functional page that visibly matches Overview/Business Explorer.
+
+Flip the sidebar item: in components/layout/sidebar.tsx change the
+"Review Explorer" entry from `comingSoon: true` to a real `href: "/reviews"`
+(same way "Business Explorer" is wired).
+
+The page (wrap it in the shared AppShell) must include:
+
+A. HEADER
+   - Title: "Review Explorer"
+   - Subtitle: "Analyze review activity across the Yelp dataset."
+   - A refresh control.
+
+B. KPI / SUMMARY CARDS (all computed server-side via aggregation)
+   1. Total Reviews          -> use estimatedDocumentCount() on `reviews`.
+   2. Average Review Rating  -> $avg of reviews.stars. (This is the AVERAGE OF
+      REVIEWS and is DIFFERENT from the average business rating on Overview —
+      label it clearly so the two are not confused.)
+   3. Total "useful" votes   -> $sum of `useful` (or show avg useful per review).
+   4. Reviews with text share OR date span (earliest..latest year) — your choice,
+      must be a real computed value.
+
+C. REVIEW RATING DISTRIBUTION  (bar chart)
+   - $group by reviews.stars (1..5), count each. Sort by rating ascending.
+   - Reuse the Recharts wrapper used by the dashboard (components/ui/chart.tsx).
+
+D. REVIEWS OVER TIME  (line or area chart)  <-- the key "velocity/volume" visual
+   - The `date` field is a STRING "YYYY-MM-DD HH:MM:SS". Extract the YEAR
+     (and/or year-month) using an aggregation. Two safe options:
+       (i) { $group: { _id: { $substrBytes: ["$date", 0, 4] }, count: {$sum:1} } }
+           to group by year (characters 0..3 of the string), OR
+       (ii) convert with $dateFromString then $year — but $substrBytes is simplest
+            and avoids parse failures on odd rows.
+   - Return review counts per year (and optionally average stars per year).
+   - Sort chronologically. Readable axes + tooltip.
+   - PERFORMANCE: this groups 7M docs. Run it ONCE server-side (not per keystroke),
+     return only the small per-year array (~15 rows). This is the heavy query —
+     document in a comment that it is a full-collection group by design and is
+     the headline "Volume" demonstration.
+
+E. TOP REVIEWED BUSINESSES  (table)
+   - Group reviews by business_id, count, take top ~15 (sorted desc, with a stable
+     secondary sort on business_id for determinism).
+   - Then look up the business NAME/city/state for those ~15 ids ONLY (either a
+     $lookup to `businesses`, or a second findOne-style query on the small id set
+     — do NOT N+1 one request per row in the browser).
+   - Show: business name, city/state, review count. Reuse the Table UI component.
+
+F. (OPTIONAL, privacy-safe) PER-BUSINESS REVIEW BREAKDOWN
+   - Let the user pick/enter a business_id (or click one from section E) and show
+     that single business's review-rating distribution + useful/funny/cool totals.
+   - You MAY show up to ~3 short truncated text snippets for THAT business only.
+     Keep it minimal and clearly a sample.
+
+G. STATES: loading skeletons (preserve layout), empty states, and an honest
+   error state (reuse components/dashboard/error-state.tsx) when the DB is
+   unreachable. Support light/dark themes and responsive layout.
+
+
+--------------------------------------------------------------------------------
+4. SUGGESTED FILE STRUCTURE  (mirror the businesses feature)
+--------------------------------------------------------------------------------
+  lib/reviews/types.ts        -> browser-facing types (no _id, no user_id, no text in bulk)
+  lib/reviews/queries.ts      -> typed aggregation functions (import "server-only")
+  lib/reviews/schema.ts       -> Zod validation if you accept any query params
+  app/api/reviews/route.ts    -> GET endpoint, export const dynamic="force-dynamic",
+                                 runtime="nodejs", no-store cache headers
+  app/reviews/page.tsx        -> the page (Suspense wrapper if using useSearchParams)
+  components/reviews/*         -> KPI cards, charts, tables, per-business view
+  hooks/use-reviews-data.ts   -> client fetch/loading/error hook (copy the dashboard hook)
+
+Reuse, don't duplicate: AppShell, chart wrapper, Card, Table, Select, Skeleton,
+Badge, error-state, and the number formatters in lib/utils.ts
+(formatCompact, formatFull, formatPercent).
+
+
+--------------------------------------------------------------------------------
+5. PERFORMANCE RULES  (this is a Big Data course — graded on this)
+--------------------------------------------------------------------------------
+  - Use estimatedDocumentCount() for the headline total.
+  - All grouping/counting/averaging happens in MongoDB via aggregation pipelines.
+  - Put $match before $group/$sort when filtering; always $limit result sets.
+  - Never find({}).toArray() on reviews. Never load the collection into JS.
+  - Return only tiny aggregated results or small, projected, paginated slices.
+  - Never project or return the `text` field except the optional tiny per-business
+    snippet described above.
+  - Run independent queries concurrently with Promise.all where sensible.
+  - Do NOT create duplicate indexes blindly. If you add an index (e.g. on
+    business_id for section E), create it idempotently in a script and DOCUMENT
+    why. Do not drop existing indexes.
+
+
+--------------------------------------------------------------------------------
+6. API / VALIDATION / SAFETY
+--------------------------------------------------------------------------------
+  - Validate any query params with Zod (bounded, allowlisted) — copy the pattern
+    in lib/businesses/schema.ts. Reject arbitrary operators; never accept raw
+    pipeline objects from the client.
+  - Keep ALL database access server-side. Never expose MONGODB_URI or any env to
+    the browser. Never use a NEXT_PUBLIC_ variable for secrets.
+  - Return a consistent JSON error envelope with correct HTTP codes
+    (400 validation, 404 not found, 503 DB unreachable, 500 other) —
+    reuse lib/businesses/api-helpers.ts style.
+  - Make the endpoint dynamic (no stale static cache): export const
+    dynamic = "force-dynamic"; runtime = "nodejs"; and set Cache-Control no-store.
+
+
+--------------------------------------------------------------------------------
+7. VERIFY BEFORE YOU SAY IT'S DONE  (run these, report real results)
+--------------------------------------------------------------------------------
+  1. npm run typecheck   -> must pass (strict). Fix errors, don't weaken config.
+  2. npm run lint        -> must pass with no warnings.
+  3. npm run build       -> must succeed.
+  4. Start the server and hit the API with real data:
+        npm run dev        (or: npm run start -- --port 3100 after a build)
+     Then verify in the browser / via curl:
+       - KPI numbers are real (Total Reviews ~6,990,280).
+       - Review rating distribution returns 5 buckets with real counts.
+       - Reviews-over-time returns a sensible per-year series.
+       - Top reviewed businesses show real names (not just ids).
+       - Overview ("/") and Business Explorer ("/businesses") STILL WORK.
+       - No raw review text is dumped in bulk; no user_id is exposed.
+       - DB-down behavior: shows the honest error state, not fake data.
+  If a check cannot be completed, say so honestly — do not claim it passed.
+
+
+--------------------------------------------------------------------------------
+8. DELIVERABLE — tell the team
+--------------------------------------------------------------------------------
+When done, summarize: files created/modified, the aggregations you wrote, any
+index you added (and why), the exact pass/fail of typecheck+lint+build, how to
+launch (npm run dev -> http://localhost:3000/reviews), and any limitation.
+
+Commit on a branch (do NOT push straight to main):
+  git checkout -b feature/review-explorer
+  git add <your files>    (add specific files; never commit .env.local)
+  git commit -m "Review Explorer: aggregate review analytics (volume)"
+  git push -u origin feature/review-explorer
+Then open a Pull Request so the team can review/merge.
+================================================================================

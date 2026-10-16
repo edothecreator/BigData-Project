@@ -67,6 +67,12 @@
     --chart-3: 42 90% 61%; /* amber */
     --chart-4: 13 100% 67%; /* coral */
     --chart-5: 227 29% 38%; /* deep slate */
+
+    /* Map Explorer surfaces (light theme) */
+    --map-ocean: 225 40% 12%; /* brand midnight navy "ocean" backdrop */
+    --map-land: 225 30% 20%; /* state/province landmasses */
+    --map-border: 225 18% 40%; /* state outlines */
+    --map-grid: 225 20% 34%; /* reserved for optional graticule */
   }
 
   .dark {
@@ -113,6 +119,12 @@
     --chart-3: 42 88% 64%;
     --chart-4: 13 90% 68%;
     --chart-5: 231 24% 72%;
+
+    /* Map Explorer surfaces (dark theme) — deeper than cards for contrast */
+    --map-ocean: 225 44% 7%;
+    --map-land: 225 34% 15%;
+    --map-border: 225 20% 32%;
+    --map-grid: 225 22% 26%;
   }
 }
 

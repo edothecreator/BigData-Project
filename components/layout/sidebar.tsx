@@ -6,7 +6,9 @@ import {
   BarChart3,
   Building2,
   type LucideIcon,
+  Map as MapIcon,
   MessagesSquare,
+  Sparkles,
   TrendingUp,
   Gauge,
 } from "lucide-react";
@@ -27,6 +29,8 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: "Overview", icon: BarChart3, href: "/" },
   { label: "Business Explorer", icon: Building2, href: "/businesses" },
+  { label: "Recommendations", icon: Sparkles, href: "/recommendations" },
+  { label: "Map Explorer", icon: MapIcon, href: "/map" },
   { label: "Review Explorer", icon: MessagesSquare, comingSoon: true },
   { label: "Market Insights", icon: TrendingUp, comingSoon: true },
   { label: "Query Performance Lab", icon: Gauge, comingSoon: true },

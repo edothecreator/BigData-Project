@@ -191,7 +191,60 @@ mongosh "mongodb://127.0.0.1:27017/yelp_analytics" --file scripts/ensure-indexes
 A text index is intentionally **not** added: name search uses a bounded regex
 to preserve exact substring semantics rather than tokenized matching.
 
-## Roadmap (not in these milestones)
+## Recommendations (`/recommendations`)
+
+Item-to-item recommender (no per-user personalization, so no user identity is
+ever involved or exposed). Two strategies, both computed live:
+
+- **Similar businesses (content-based)** — ranks candidates by shared categories
+  (the comma-separated string is split/trimmed/intersected in the pipeline),
+  preferring same-state results, then rating and review volume. ~500ms.
+- **People also reviewed (collaborative)** — finds the businesses most commonly
+  reviewed by the same people as the seed, from co-review counts in `reviews`.
+  Index-backed (~tens of ms). If the required `reviews` indexes are missing, or
+  there is too little signal, it **falls back to content-based** and says so.
+
+No review text and no `user_id` are returned — only aggregate co-review counts.
+
+API: `GET /api/recommendations` (seed + strategy + limit, Zod-validated) and
+`GET /api/recommendations/seeds` (debounced seed search).
+
+## Map Explorer (`/map`)
+
+A dependency-free geographic map of real business coordinates — **no external
+map/tiles library, no API key, no outbound request** (per project scope).
+Business coordinates are projected into an SVG viewport with a cos(latitude)
+correction and drawn over **bundled, local US + Canada state/province outlines**
+(so the dots land on the right states). Markers are colored by open/closed
+status and sized by review volume, with hover tooltips and a legend.
+
+The outline file (`lib/map/na-states.geo.json`, ~380 KB) is derived from the
+public-domain **Natural Earth** 50m admin-1 dataset (via
+github.com/martynafford/natural-earth-geojson), trimmed to US + Canada and
+reduced to ~1 km coordinate precision. It is committed to the repo and loaded
+locally — nothing is fetched at runtime.
+
+- Filters: state, status, minimum rating, and a marker cap (200/500/1000).
+- The API returns a **bounded** set (top-N by review volume) plus the exact
+  match count, so the UI honestly shows "showing N of M". `_id` is never sent.
+
+API: `GET /api/map` (Zod-validated filters).
+
+## Optional indexes — reviews
+
+In addition to the `businesses` indexes above, the collaborative recommender
+needs two indexes on the 6.99M-document `reviews` collection, created by the
+same script (`scripts/ensure-indexes.js`):
+
+- `{ business_id: 1 }` — find the reviewers of a seed business.
+- `{ user_id: 1 }` — find all businesses a set of users reviewed.
+
+Without them, collaborative recommendations would require a full scan per user
+and effectively time out, so the recommender detects their absence and falls
+back to content-based mode.
+
+## Roadmap (team milestones in progress)
 
 Review Explorer, Market Insights, and a Query Performance Lab are present in the
-sidebar marked **Soon** and intentionally non-functional.
+sidebar marked **Soon** and are being implemented separately (see
+`team-prompts/`).
