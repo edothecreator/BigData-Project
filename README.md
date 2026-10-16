@@ -193,5 +193,46 @@ to preserve exact substring semantics rather than tokenized matching.
 
 ## Roadmap (not in these milestones)
 
-Review Explorer, Market Insights, and a Query Performance Lab are present in the
-sidebar marked **Soon** and intentionally non-functional.
+Market Insights and Query Performance Lab remain marked **Soon** in the sidebar.
+Review Explorer is available at `/reviews`.
+
+## Review Explorer (`/reviews`) — Volume
+
+Aggregate review analytics over the entire `reviews` collection. Launch with
+`npm run dev` and open http://localhost:3000/reviews, or use the Docker setup
+above. The page reuses AppShell, themed charts, tables, skeletons, error recovery,
+and refresh notifications. Overview and Business Explorer keep their queries.
+
+`GET /api/reviews` accepts no query parameters (unknown parameters return 400),
+is dynamic, and returns `Cache-Control: no-store`. Its small JSON contract includes:
+
+- An **estimated** total from `estimatedDocumentCount()`.
+- A MongoDB `$group` for average **review** stars and total useful votes.
+- Five integer rating buckets from `$match` / `$group` / `$sort` / `$limit`.
+- Annual volume using `$substrBytes` on validated date prefixes. The year span
+  comes from this series; missing/malformed prefixes are excluded.
+- Fifteen businesses ranked by grouped review count and business ID as a stable
+  tiebreaker. One projected `$in` query loads names/cities/states for those IDs.
+
+These full-collection aggregations are intentional demonstrations of **Volume**:
+all grouping stays in MongoDB and only bounded aggregates leave the server.
+Independent queries run concurrently with disk spilling permitted and a 180-second
+limit per aggregation. Concurrent requests share the current computation;
+completed results are not cached. There are no keystroke-triggered queries.
+Refresh recomputes the statistics and can be expensive on 6.99M documents.
+A timeout returns an honest 500 error rather than partial/fabricated statistics;
+unreachable MongoDB returns 503. A missing collection is labeled “Not imported”.
+No index is added: these dataset-wide groups need to read the collection, and
+only a bounded set of business labels is fetched. No server settings are changed.
+
+The API never reads or returns review text, user IDs or profiles. The optional
+per-business snippet feature is deliberately omitted. Dataset import is not part
+of this feature. If metadata is missing, the table labels it explicitly.
+
+Verification in the implementation environment: `npm run typecheck`,
+`npm run lint`, and `npm run build` were attempted but could not run because
+dependencies are unavailable (`tsc` / `next` not found). Installing with
+`npm ci` encountered registry download timeouts. Rerun all three commands after
+dependencies install successfully. Database/API and browser integration checks,
+including database-down behavior, were intentionally not run: MongoDB has not
+yet been installed. Real counts and rendering remain unverified.

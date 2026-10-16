@@ -27,7 +27,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: "Overview", icon: BarChart3, href: "/" },
   { label: "Business Explorer", icon: Building2, href: "/businesses" },
-  { label: "Review Explorer", icon: MessagesSquare, comingSoon: true },
+  { label: "Review Explorer", icon: MessagesSquare, href: "/reviews" },
   { label: "Market Insights", icon: TrendingUp, comingSoon: true },
   { label: "Query Performance Lab", icon: Gauge, comingSoon: true },
 ];
