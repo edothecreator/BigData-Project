@@ -1,6 +1,10 @@
 /*
- * ReviewScope cluster-bubble styling, overriding leaflet.markercluster's
- * default green/yellow/orange with the brand indigo so clusters match the app.
+ * ReviewScope cluster-bubble styling.
+ *
+ * We don't rely on leaflet.markercluster's bundled "Default" theme; instead we
+ * fully define the bubble ourselves so it's a clean indigo circle (halo + core)
+ * that matches the brand, with the count centered. This avoids the unstyled
+ * square-box fallback you get when only the base MarkerCluster.css is loaded.
  */
 
 .marker-cluster,
@@ -8,15 +12,35 @@
 .marker-cluster-medium,
 .marker-cluster-large {
   background-color: rgba(109, 94, 248, 0.25); /* indigo halo */
+  border-radius: 50%;
+  /* Base plugin sets inline width/height (40x40); keep it circular. */
 }
 
 .marker-cluster div,
 .marker-cluster-small div,
 .marker-cluster-medium div,
 .marker-cluster-large div {
-  background-color: rgba(109, 94, 248, 0.9); /* indigo core */
+  background-color: rgba(109, 94, 248, 0.95); /* indigo core */
   color: #ffffff;
   font-weight: 600;
+  border-radius: 50%;
+  /* Center the core inside the halo and the number inside the core. */
+  width: 30px;
+  height: 30px;
+  margin: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(18, 24, 43, 0.35);
+}
+
+.marker-cluster span {
+  line-height: 1;
+}
+
+/* Larger clusters get a slightly stronger halo for subtle hierarchy. */
+.marker-cluster-large {
+  background-color: rgba(109, 94, 248, 0.32);
 }
 
 /* Leaflet popups: match the card/popover surfaces. */
@@ -24,7 +48,7 @@
   border-radius: 10px;
 }
 
-/* Keep Leaflet's own controls above our overlay chrome but below modals. */
+/* Use the app font inside the map. */
 .leaflet-container {
   font-family: var(--font-sans), system-ui, sans-serif;
 }

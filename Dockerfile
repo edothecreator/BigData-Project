@@ -7,7 +7,7 @@ FROM dependencies AS builder
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 # Build-time placeholders; Compose provides the actual runtime configuration.
-RUN mkdir -p public && MONGODB_URI=mongodb://mongo:27017 MONGODB_DB=yelp_analytics npm run build
+RUN mkdir -p public && BUILD_STANDALONE=true MONGODB_URI=mongodb://mongo:27017 MONGODB_DB=yelp_analytics npm run build
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
