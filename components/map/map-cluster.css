@@ -1,0 +1,30 @@
+/*
+ * ReviewScope cluster-bubble styling, overriding leaflet.markercluster's
+ * default green/yellow/orange with the brand indigo so clusters match the app.
+ */
+
+.marker-cluster,
+.marker-cluster-small,
+.marker-cluster-medium,
+.marker-cluster-large {
+  background-color: rgba(109, 94, 248, 0.25); /* indigo halo */
+}
+
+.marker-cluster div,
+.marker-cluster-small div,
+.marker-cluster-medium div,
+.marker-cluster-large div {
+  background-color: rgba(109, 94, 248, 0.9); /* indigo core */
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Leaflet popups: match the card/popover surfaces. */
+.leaflet-popup-content-wrapper {
+  border-radius: 10px;
+}
+
+/* Keep Leaflet's own controls above our overlay chrome but below modals. */
+.leaflet-container {
+  font-family: var(--font-sans), system-ui, sans-serif;
+}

@@ -211,24 +211,24 @@ API: `GET /api/recommendations` (seed + strategy + limit, Zod-validated) and
 
 ## Map Explorer (`/map`)
 
-A dependency-free geographic map of real business coordinates — **no external
-map/tiles library, no API key, no outbound request** (per project scope).
-Business coordinates are projected into an SVG viewport with a cos(latitude)
-correction and drawn over **bundled, local US + Canada state/province outlines**
-(so the dots land on the right states). Markers are colored by open/closed
-status and sized by review volume, with hover tooltips and a legend.
+An interactive **Leaflet** map plotting businesses at their exact Yelp
+coordinates, with **marker clustering** so dense cities stay readable (clusters
+expand on click/zoom). Markers are colored by open/closed status; a popup shows
+the name, rating, review count, and status. The basemap uses **CARTO** tiles
+(light/dark variants that follow the app theme) — free and no API key.
 
-The outline file (`lib/map/na-states.geo.json`, ~380 KB) is derived from the
-public-domain **Natural Earth** 50m admin-1 dataset (via
-github.com/martynafford/natural-earth-geojson), trimmed to US + Canada and
-reduced to ~1 km coordinate precision. It is committed to the repo and loaded
-locally — nothing is fetched at runtime.
-
+- Loaded client-side via `next/dynamic` (`ssr: false`) since Leaflet needs
+  `window`; the map chunk is lazy-loaded only on this route.
 - Filters: state, status, minimum rating, and a marker cap (200/500/1000).
 - The API returns a **bounded** set (top-N by review volume) plus the exact
   match count, so the UI honestly shows "showing N of M". `_id` is never sent.
 
 API: `GET /api/map` (Zod-validated filters).
+
+> **Privacy note:** the basemap tile images are the only external request in the
+> whole app. The Yelp business **data** never leaves the machine — it stays in
+> local MongoDB and only aggregate point coordinates are drawn. No business data
+> is sent to the tile provider.
 
 ## Optional indexes — reviews
 
