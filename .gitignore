@@ -29,3 +29,6 @@ next-env.d.ts
 
 # temp
 .tmp-*
+
+# Local Yelp dataset
+/data/

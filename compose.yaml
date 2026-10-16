@@ -1,0 +1,61 @@
+name: reviewscope
+
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    environment:
+      MONGODB_URI: mongodb://mongo:27017
+      MONGODB_DB: ${MONGODB_DB:-yelp_analytics}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  mongo:
+    image: mongo:8.0
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand('ping').ok ? 0 : 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  import:
+    image: mongo:8.0
+    profiles: [tools]
+    environment:
+      MONGODB_DB: ${MONGODB_DB:-yelp_analytics}
+    volumes:
+      - ${YELP_DATA_DIR:-./data}:/dataset:ro
+      - ./scripts/import-yelp.sh:/scripts/import-yelp.sh:ro
+    depends_on:
+      mongo:
+        condition: service_healthy
+    entrypoint: ["sh", "/scripts/import-yelp.sh"]
+
+  indexes:
+    image: mongo:8.0
+    profiles: [tools]
+    environment:
+      MONGODB_DB: ${MONGODB_DB:-yelp_analytics}
+    volumes:
+      - ./scripts/ensure-indexes.js:/scripts/ensure-indexes.js:ro
+    depends_on:
+      mongo:
+        condition: service_healthy
+    entrypoint: ["sh", "-c"]
+    command: ['exec mongosh "mongodb://mongo:27017/$$MONGODB_DB" --file /scripts/ensure-indexes.js']
+
+volumes:
+  mongo_data:

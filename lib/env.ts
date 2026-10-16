@@ -28,7 +28,7 @@ if (!parsed.success) {
     .map((i) => `  - ${i.path.join(".")}: ${i.message}`)
     .join("\n");
   throw new Error(
-    `Invalid environment configuration. Check your .env.local file:\n${issues}`,
+    `Invalid environment configuration. Check the container environment or your .env.local file:\n${issues}`,
   );
 }
 
