@@ -328,6 +328,33 @@ dependencies install successfully. Database/API and browser integration checks,
 including database-down behavior, were intentionally not run: MongoDB has not
 yet been installed. Real counts and rendering remain unverified.
 
-## Roadmap (team milestones in progress)
+## Query Performance Lab (`/performance`)
 
-Query Performance Lab remains marked **Soon** in the sidebar (see `team-prompts/`).
+Demonstrates how indexing and query shape affect performance at scale — the
+capstone that makes the rest of the app's performance decisions visible.
+
+- **Curated scenarios only.** The client picks a scenario from an allowlist
+  (filter by state, state+city, sort by rating/reviews, name regex, count by
+  state) plus a few bounded params. It can **never** send a raw filter,
+  pipeline, field name, or MongoDB operator — the server builds every query
+  itself from the validated params. All operations are read-only
+  (`find` / `countDocuments` / `explain`).
+- **Reports `explain("executionStats")`**, normalized to a plan summary:
+  IXSCAN vs COLLSCAN, index name, in-memory sort flag, documents examined vs
+  returned, keys examined, and MongoDB's execution time — plus a measured
+  wall-clock median.
+- **The teaching contrast:** an indexed scenario (e.g. state+city) shows IXSCAN
+  examining exactly as many docs as it returns; the name-regex scenario shows a
+  COLLSCAN examining far more — with a plain-language explanation of why.
+- **Count scenario** contrasts exact `countDocuments` with the O(1)
+  `estimatedDocumentCount` metadata estimate.
+- A read-only **current-indexes panel** lists the live indexes on `businesses`.
+
+APIs: `GET /api/performance` (Zod-validated, `.strict()`, scenario allowlist)
+and `GET /api/performance/indexes`.
+
+## Status — all milestones complete
+
+Every sidebar feature is functional: Overview, Business Explorer,
+Recommendations, Map Explorer, Review Explorer, Market Insights, and the Query
+Performance Lab. The original task briefs live in `team-prompts/`.

@@ -33,7 +33,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Map Explorer", icon: MapIcon, href: "/map" },
   { label: "Review Explorer", icon: MessagesSquare, href: "/reviews" },
   { label: "Market Insights", icon: TrendingUp, href: "/insights" },
-  { label: "Query Performance Lab", icon: Gauge, comingSoon: true },
+  { label: "Query Performance Lab", icon: Gauge, href: "/performance" },
 ];
 
 function isActive(pathname: string, href?: string): boolean {
