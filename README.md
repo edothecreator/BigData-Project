@@ -342,16 +342,24 @@ capstone that makes the rest of the app's performance decisions visible.
 - **Reports `explain("executionStats")`**, normalized to a plan summary:
   IXSCAN vs COLLSCAN, index name, in-memory sort flag, documents examined vs
   returned, keys examined, and MongoDB's execution time — plus a measured
-  wall-clock median.
+  server-side wall-clock time (`performance.now()` around 3 real executions,
+  median reported; separate from the explain run).
+- **With vs without index, without dropping anything:** every scenario also runs
+  with `hint({ $natural: 1 })`, which forces a collection scan. The UI shows
+  both plans side by side (verdict badges, bar charts, metrics table).
 - **The teaching contrast:** an indexed scenario (e.g. state+city) shows IXSCAN
   examining exactly as many docs as it returns; the name-regex scenario shows a
   COLLSCAN examining far more — with a plain-language explanation of why.
-- **Count scenario** contrasts exact `countDocuments` with the O(1)
-  `estimatedDocumentCount` metadata estimate.
-- A read-only **current-indexes panel** lists the live indexes on `businesses`.
+- **Count scenario** explains the exact `countDocuments` pipeline (COUNT_SCAN on
+  the index, 0 docs read) and contrasts it with `estimatedDocumentCount`.
+- **Indexes panel** lists the live indexes on `businesses`, and can create one
+  of three allowlisted indexes (the same as `scripts/ensure-indexes.js`) if it
+  is missing. Creation is idempotent and non-unique; there is no drop.
 
-APIs: `GET /api/performance` (Zod-validated, `.strict()`, scenario allowlist)
-and `GET /api/performance/indexes`.
+APIs: `GET /api/performance` (Zod-validated, `.strict()`, scenario allowlist),
+`GET /api/performance/indexes`, and `POST /api/performance/indexes` with
+`{ "index": "<allowlisted id>" }` (JSON content type + same-origin required).
+There is no authentication on these endpoints; they are meant for local use.
 
 ## Status — all milestones complete
 

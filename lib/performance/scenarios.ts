@@ -2,25 +2,17 @@ import "server-only";
 
 import type { Document, Sort } from "mongodb";
 
+import { escapeRegex } from "@/lib/businesses/queries";
+import type { ScenarioId } from "@/lib/performance/catalog";
+
 /**
- * Curated, ALLOWLISTED query scenarios for the Query Performance Lab.
+ * Server-side query builders for the allowlisted scenarios.
  *
- * SAFETY: the client may only pick a scenario by id plus a few bounded params.
- * It can never send a raw filter, pipeline, field name, or MongoDB operator.
- * Each scenario builds its own filter/sort/limit here, server-side, from those
- * validated params. This is the single source of truth for what the lab can run.
+ * SAFETY: the client only picks a scenario id (validated against SCENARIO_IDS)
+ * plus a few bounded scalar params. It can never send a raw filter, pipeline,
+ * field name, or operator. Every filter/sort/limit is constructed here, with
+ * user strings used only as equality values or as an ESCAPED regex literal.
  */
-
-export const SCENARIO_IDS = [
-  "state-equality",
-  "state-city",
-  "sort-stars",
-  "sort-reviews",
-  "name-regex",
-  "count-filter",
-] as const;
-
-export type ScenarioId = (typeof SCENARIO_IDS)[number];
 
 /** Parameters a scenario may read (all validated + bounded by the schema). */
 export interface ScenarioParams {
@@ -29,120 +21,59 @@ export interface ScenarioParams {
   search?: string;
 }
 
-export type ScenarioKind = "find" | "count";
+export type ScenarioPlan =
+  | { kind: "find"; filter: Document; sort?: Sort; limit: number }
+  | { kind: "count"; filter: Document };
 
-export interface ScenarioPlan {
-  kind: ScenarioKind;
-  filter: Document;
-  sort?: Sort;
-  limit?: number;
-}
+/** Every find scenario returns at most this many documents. */
+export const RESULT_LIMIT = 25;
 
-export interface ScenarioDef {
-  id: ScenarioId;
-  label: string;
-  description: string;
-  /** Which bounded params this scenario uses, for the UI to render inputs. */
-  params: Array<"state" | "city" | "search">;
-  /** The index that *should* serve it, for teaching context. */
-  expectedIndex: string | null;
-  build: (p: ScenarioParams) => ScenarioPlan;
-}
+const DEFAULT_STATE = "PA";
+const DEFAULT_CITY = "Philadelphia";
+const DEFAULT_SEARCH = "coffee";
 
-/** Escape regex metacharacters so user input is matched literally. */
-export function escapeRegex(input: string): string {
-  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-const DEFAULT_LIMIT = 25;
-
-export const SCENARIOS: Record<ScenarioId, ScenarioDef> = {
-  "state-equality": {
-    id: "state-equality",
-    label: "Filter by state",
-    description:
-      "Equality match on a single state. Served by the compound (state, city) index as a prefix.",
-    params: ["state"],
-    expectedIndex: "state_1_city_1",
-    build: (p) => ({
-      kind: "find",
-      filter: { state: p.state ?? "PA" },
-      limit: DEFAULT_LIMIT,
-    }),
-  },
-  "state-city": {
-    id: "state-city",
-    label: "Filter by state + city",
-    description:
-      "Equality on both keys of the compound index — the ideal indexed lookup.",
-    params: ["state", "city"],
-    expectedIndex: "state_1_city_1",
-    build: (p) => ({
-      kind: "find",
-      filter: {
-        state: p.state ?? "PA",
-        city: p.city ?? "Philadelphia",
-      },
-      limit: DEFAULT_LIMIT,
-    }),
-  },
-  "sort-stars": {
-    id: "sort-stars",
-    label: "Sort by rating",
-    description:
-      "Top businesses by stars. The (stars, business_id) index lets MongoDB walk the order without scanning or sorting in memory.",
-    params: [],
-    expectedIndex: "stars_-1_business_id_1",
-    build: () => ({
-      kind: "find",
-      filter: {},
-      sort: { stars: -1, business_id: 1 },
-      limit: DEFAULT_LIMIT,
-    }),
-  },
-  "sort-reviews": {
-    id: "sort-reviews",
-    label: "Sort by review count",
-    description:
-      "Top businesses by review_count, served by the (review_count, business_id) index.",
-    params: [],
-    expectedIndex: "review_count_-1_business_id_1",
-    build: () => ({
-      kind: "find",
-      filter: {},
-      sort: { review_count: -1, business_id: 1 },
-      limit: DEFAULT_LIMIT,
-    }),
-  },
-  "name-regex": {
-    id: "name-regex",
-    label: "Search name (regex)",
-    description:
-      "Case-insensitive substring match on name. A btree index can't serve an unanchored regex, so this falls back to a collection scan — the teaching counter-example.",
-    params: ["search"],
-    expectedIndex: null,
-    build: (p) => ({
-      kind: "find",
-      filter: {
-        name: { $regex: escapeRegex(p.search ?? "coffee"), $options: "i" },
-      },
-      limit: DEFAULT_LIMIT,
-    }),
-  },
-  "count-filter": {
-    id: "count-filter",
-    label: "Count by state",
-    description:
-      "countDocuments over a state filter. Compared with the O(1) metadata estimate in the results panel.",
-    params: ["state"],
-    expectedIndex: "state_1_city_1",
-    build: (p) => ({
-      kind: "count",
-      filter: { state: p.state ?? "PA" },
-    }),
-  },
+const BUILDERS: Record<ScenarioId, (p: ScenarioParams) => ScenarioPlan> = {
+  "state-equality": (p) => ({
+    kind: "find",
+    filter: { state: p.state ?? DEFAULT_STATE },
+    limit: RESULT_LIMIT,
+  }),
+  "state-city": (p) => ({
+    kind: "find",
+    filter: {
+      state: p.state ?? DEFAULT_STATE,
+      city: p.city ?? DEFAULT_CITY,
+    },
+    limit: RESULT_LIMIT,
+  }),
+  "sort-stars": () => ({
+    kind: "find",
+    filter: {},
+    sort: { stars: -1, business_id: 1 },
+    limit: RESULT_LIMIT,
+  }),
+  "sort-reviews": () => ({
+    kind: "find",
+    filter: {},
+    sort: { review_count: -1, business_id: 1 },
+    limit: RESULT_LIMIT,
+  }),
+  "name-regex": (p) => ({
+    kind: "find",
+    filter: {
+      name: { $regex: escapeRegex(p.search ?? DEFAULT_SEARCH), $options: "i" },
+    },
+    limit: RESULT_LIMIT,
+  }),
+  "count-filter": (p) => ({
+    kind: "count",
+    filter: { state: p.state ?? DEFAULT_STATE },
+  }),
 };
 
-export function getScenario(id: ScenarioId): ScenarioDef {
-  return SCENARIOS[id];
+export function buildScenario(
+  id: ScenarioId,
+  params: ScenarioParams,
+): ScenarioPlan {
+  return BUILDERS[id](params);
 }

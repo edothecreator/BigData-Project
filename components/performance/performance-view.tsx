@@ -2,8 +2,16 @@
 
 import * as React from "react";
 import { Info, Play } from "lucide-react";
+import { toast } from "sonner";
 
+import { CityCombobox } from "@/components/businesses/city-combobox";
+import { ErrorState } from "@/components/dashboard/error-state";
 import { AppShell } from "@/components/layout/app-shell";
+import { IndexesPanel } from "@/components/performance/indexes-panel";
+import {
+  ResultPanel,
+  ResultPanelSkeleton,
+} from "@/components/performance/result-panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,14 +23,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ResultPanel } from "@/components/performance/result-panel";
-import { IndexesPanel } from "@/components/performance/indexes-panel";
+import { useFilterOptions } from "@/hooks/use-filter-options";
+import { useBusinessIndexes, usePerformanceRun } from "@/hooks/use-performance";
 import {
-  useBusinessIndexes,
-  usePerformanceRun,
-} from "@/hooks/use-performance";
-import { SCENARIO_CATALOG } from "@/lib/performance/catalog";
-import type { ScenarioId } from "@/lib/performance/scenarios";
+  getScenarioInfo,
+  SCENARIO_CATALOG,
+  type ManagedIndexId,
+  type ScenarioId,
+} from "@/lib/performance/catalog";
+import { explainResult } from "@/lib/performance/explain-text";
+import {
+  MAX_CITY_LENGTH,
+  MAX_SEARCH_LENGTH,
+  MAX_STATE_LENGTH,
+} from "@/lib/performance/schema";
 import { cn } from "@/lib/utils";
 
 export function PerformanceView() {
@@ -32,29 +46,71 @@ export function PerformanceView() {
   const [search, setSearch] = React.useState("coffee");
 
   const { run, result, error, isRunning } = usePerformanceRun();
-  const { indexes } = useBusinessIndexes();
+  const indexes = useBusinessIndexes();
+  const { options } = useFilterOptions();
 
-  const scenario = SCENARIO_CATALOG.find((s) => s.id === scenarioId)!;
+  const scenario = getScenarioInfo(scenarioId);
+  const needs = (p: "state" | "city" | "search") => scenario.params.includes(p);
+  const missingCity = needs("city") && city.trim() === "";
+  const missingSearch = needs("search") && search.trim() === "";
+  const canRun = !isRunning && !missingCity && !missingSearch;
 
-  const onRun = () => {
+  const runCurrent = React.useCallback(() => {
+    const info = getScenarioInfo(scenarioId);
     void run(scenarioId, {
-      state: scenario.params.includes("state") ? state : undefined,
-      city: scenario.params.includes("city") ? city : undefined,
-      search: scenario.params.includes("search") ? search : undefined,
+      state: info.params.includes("state") ? state : undefined,
+      city: info.params.includes("city") ? city : undefined,
+      search: info.params.includes("search") ? search : undefined,
     });
-  };
+  }, [run, scenarioId, state, city, search]);
 
-  // Run the default scenario once on first mount for an immediate result.
+  // Run the default scenario once on mount for an immediate result.
   const didInit = React.useRef(false);
   React.useEffect(() => {
     if (didInit.current) return;
     didInit.current = true;
-    onRun();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    runCurrent();
+  }, [runCurrent]);
 
-  const connected =
-    error?.code === "DB_UNREACHABLE" ? false : result ? true : null;
+  // Surface non-connection failures (e.g. 400 validation) as a toast; keep
+  // the previous result on screen instead of blanking it.
+  React.useEffect(() => {
+    if (error && error.code !== "DB_UNREACHABLE") {
+      toast.error("Scenario failed", { description: error.message });
+    }
+  }, [error]);
+
+  const onEnsure = async (id: ManagedIndexId) => {
+    const res = await indexes.ensure(id);
+    if (!res.ok) {
+      toast.error("Could not create index", { description: res.error.message });
+      return;
+    }
+    if (res.data.created) {
+      toast.success(`Created ${id}`, {
+        description: `Built in ${res.data.buildMs} ms. Re-running the scenario…`,
+      });
+    } else {
+      toast.info(`${id} already exists`, { description: "Nothing to do." });
+    }
+    if (result && getScenarioInfo(result.scenarioId).expectedIndex === id) {
+      runCurrent();
+    }
+  };
+
+  const resultInfo = result ? getScenarioInfo(result.scenarioId) : null;
+  const expectedPresent =
+    resultInfo?.expectedIndex && indexes.data
+      ? (indexes.data.managed.find((m) => m.id === resultInfo.expectedIndex)
+          ?.present ?? null)
+      : null;
+  const explanation =
+    result && resultInfo
+      ? explainResult(result, resultInfo.expectedIndex, expectedPresent)
+      : null;
+
+  const dbDown = error?.code === "DB_UNREACHABLE";
+  const connected = dbDown ? false : result ? true : null;
 
   return (
     <AppShell
@@ -63,26 +119,30 @@ export function PerformanceView() {
       connected={connected}
     >
       <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-        <Info className="mt-0.5 h-4 w-4 shrink-0" />
+        <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
         <span>
           Pick a predefined, read-only scenario and run it against the live
-          ~150K-business collection. The lab reports MongoDB&apos;s{" "}
-          <code className="font-mono">explain()</code> plan — index scan vs.
-          collection scan — plus documents examined and timing. Only curated
-          scenarios run; no custom queries are accepted.
+          ~150K-document <code className="font-mono">businesses</code>{" "}
+          collection. Each run reports MongoDB&apos;s{" "}
+          <code className="font-mono">explain(&quot;executionStats&quot;)</code>{" "}
+          for the planner&apos;s choice and for the same query forced to a
+          collection scan with{" "}
+          <code className="font-mono">hint({"{ $natural: 1 }"})</code> — the
+          &quot;without index&quot; baseline, no index dropped. Only curated
+          scenarios run; custom queries are not accepted.
         </span>
       </div>
 
-      {/* Controls */}
+      {/* Scenario picker */}
       <Card>
-        <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-end">
-          <div className="w-full space-y-1.5 lg:w-80">
-            <Label>Scenario</Label>
+        <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:flex-wrap lg:items-end">
+          <div className="w-full space-y-1.5 lg:w-72">
+            <Label htmlFor="perf-scenario">Scenario</Label>
             <Select
               value={scenarioId}
               onValueChange={(v) => setScenarioId(v as ScenarioId)}
             >
-              <SelectTrigger aria-label="Choose a scenario">
+              <SelectTrigger id="perf-scenario" aria-label="Choose a scenario">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -95,69 +155,121 @@ export function PerformanceView() {
             </Select>
           </div>
 
-          {scenario.params.includes("state") ? (
+          {needs("state") ? (
             <div className="w-full space-y-1.5 sm:w-32">
               <Label htmlFor="perf-state">State</Label>
-              <Input
-                id="perf-state"
-                value={state}
-                onChange={(e) => setState(e.target.value)}
-                maxLength={8}
-                placeholder="PA"
-              />
+              {options?.states.length ? (
+                <Select
+                  value={state}
+                  onValueChange={(v) => {
+                    setState(v);
+                    if (v !== state) setCity("");
+                  }}
+                >
+                  <SelectTrigger id="perf-state" aria-label="Choose a state">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {options.states.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="perf-state"
+                  value={state}
+                  onChange={(e) => setState(e.target.value.toUpperCase())}
+                  maxLength={MAX_STATE_LENGTH}
+                  placeholder="PA"
+                />
+              )}
             </div>
           ) : null}
 
-          {scenario.params.includes("city") ? (
-            <div className="w-full space-y-1.5 sm:w-48">
-              <Label htmlFor="perf-city">City</Label>
-              <Input
-                id="perf-city"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                maxLength={80}
-                placeholder="Philadelphia"
-              />
+          {needs("city") ? (
+            <div className="w-full space-y-1.5 sm:w-56">
+              <Label>City</Label>
+              {options ? (
+                <CityCombobox
+                  value={city}
+                  stateFilter={state}
+                  options={options.cities}
+                  onChange={setCity}
+                />
+              ) : (
+                <Input
+                  aria-label="City"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  maxLength={MAX_CITY_LENGTH}
+                  placeholder="Philadelphia"
+                />
+              )}
             </div>
           ) : null}
 
-          {scenario.params.includes("search") ? (
-            <div className="w-full space-y-1.5 sm:w-48">
+          {needs("search") ? (
+            <div className="w-full space-y-1.5 sm:w-56">
               <Label htmlFor="perf-search">Name contains</Label>
               <Input
                 id="perf-search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                maxLength={60}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && canRun) runCurrent();
+                }}
+                maxLength={MAX_SEARCH_LENGTH}
                 placeholder="coffee"
               />
             </div>
           ) : null}
 
-          <Button onClick={onRun} disabled={isRunning} className="lg:ml-auto">
-            <Play className={cn("h-4 w-4", isRunning && "animate-pulse")} />
+          <Button onClick={runCurrent} disabled={!canRun} className="lg:ml-auto">
+            <Play className={cn(isRunning && "animate-pulse")} />
             {isRunning ? "Running…" : "Run scenario"}
           </Button>
         </CardContent>
       </Card>
 
-      <p className="text-xs text-muted-foreground">{scenario.description}</p>
+      <p className="text-xs text-muted-foreground">
+        {scenario.description}
+        {scenario.expectedIndex ? (
+          <>
+            {" "}
+            Expected index:{" "}
+            <code className="font-mono">{scenario.expectedIndex}</code>.
+          </>
+        ) : null}
+        {missingCity ? " Choose a city to run this scenario." : null}
+        {missingSearch ? " Enter a search term to run this scenario." : null}
+      </p>
 
-      {error && !result ? (
-        <Card className="border-destructive/30">
-          <CardContent className="p-6 text-center text-sm text-destructive">
-            {error.message}
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {result ? (
-        <div className={cn(isRunning && "opacity-60 transition-opacity")}>
-          <ResultPanel result={result} />
+      {dbDown && error ? (
+        <ErrorState error={error} onRetry={runCurrent} isRetrying={isRunning} />
+      ) : result && explanation ? (
+        <div
+          className={cn(isRunning && "opacity-60 transition-opacity")}
+          aria-busy={isRunning}
+        >
+          <ResultPanel result={result} explanation={explanation} />
         </div>
+      ) : isRunning ? (
+        <ResultPanelSkeleton />
+      ) : error ? (
+        <ErrorState error={error} onRetry={runCurrent} isRetrying={isRunning} />
       ) : null}
 
-      <IndexesPanel data={indexes} />
+      <IndexesPanel
+        data={indexes.data}
+        error={indexes.error}
+        isLoading={indexes.isLoading}
+        pending={indexes.pending}
+        onRefresh={() => void indexes.refresh()}
+        onEnsure={(id) => void onEnsure(id)}
+      />
     </AppShell>
   );
 }
